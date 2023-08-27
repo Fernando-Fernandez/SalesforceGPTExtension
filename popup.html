@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- <link rel="stylesheet" href="./popup.css" /> -->
+  </head>
+  <body style="width: 400px;" >
+    <template id="li_template">
+      <li>
+        <a>
+          <h3 class="title">Tab Title</h3>
+          <p class="pathname">Tab Pathname</p>
+        </a>
+      </li>
+    </template>
+
+    <h1>Salesforce GPT Extension</h1>
+    <span id="error" style="font-weight: bold; color: red;" ></span>
+    <br />
+
+    <label for="openAIKey" >OpenAI Key</label>
+    <input id="openAIKey" type="password" name="openAIKey" />
+    &nbsp;&nbsp;
+    <button id="setKey" >Set OpenAI key</button>
+    <br /><br />
+
+    <button id="sendToGPT" >Ask GPT to Explain</button>
+    <ul></ul>
+
+    <br />
+    <span id="response" > </span>
+
+    <script src="./scripts/popup.js" type="module"></script>
+  </body>
+</html>
