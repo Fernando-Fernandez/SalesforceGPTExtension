@@ -1,6 +1,6 @@
-##Salesforce GPT Extension
+## Salesforce GPT Extension
 
-#Gets a GPT answer about a Salesforce item (flow, debug, class, formula, etc).
+# Gets a GPT answer about a Salesforce item (flow, debug, class, formula, etc).
 
 A simple browser extension that reads the page content and requests OpenAI GPT to explain/summarize the content.
 
