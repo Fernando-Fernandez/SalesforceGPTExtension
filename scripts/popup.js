@@ -5,8 +5,6 @@ const responseSpan = document.querySelector( "#response" );
 const spinner = document.querySelector( "#spinner" );
 const GETDATA = "getData";
 const KEY = 'hashedKey';
-const ENCRYPT = 'slightlyBetterThanNoEncryption';
-let keyPair;
 
 errorSpan.innerText = "";
 spinner.style.display = "none";
@@ -16,48 +14,14 @@ setKeyButton.addEventListener( "click", async () => {
     errorSpan.innerText = "";
     const openAIKeyInput = document.querySelector( "input#openAIKey" );
 
-    keyPair = await generateKey();
+    let enc = new TextEncoder();
+    let encrypted = enc.encode( openAIKeyInput.value );
 
-    let encrypted = await encryptMessage( openAIKeyInput.value, keyPair.publicKey );
-
-    localStorage.setItem( KEY, JSON.stringify( encrypted ) ); //openAIKeyInput.value );
+    localStorage.setItem( KEY, JSON.stringify( encrypted ) );
 
     // clear out previous secret key
-    localStorage.setItem( "openAIKey", null );
+    localStorage.setItem( "openAIKey", undefined );
 });
-
-async function generateKey() {
-    return window.crypto.subtle.generateKey(
-        {
-            name: "RSA-OAEP",
-            modulusLength: 2048,
-            publicExponent: new Uint8Array( [ 1, 0, 1 ] ),
-            hash: "SHA-256",
-        },
-        true,
-        ["encrypt", "decrypt"]
-    );
-}
-
-async function encryptMessage( message, key ) {
-    let enc = new TextEncoder();
-    let encoded = enc.encode( message );
-    let ciphertext = await window.crypto.subtle.encrypt(
-      { name: "RSA-OAEP" }, key, encoded
-    );
-
-    let buffer = new Uint8Array( ciphertext, 0, 256 );
-    return buffer;
-}
-
-async function decryptMessage( key, ciphertext ) {
-    let decrypted = await window.crypto.subtle.decrypt(
-      { name: "RSA-OAEP" }, key, ciphertext
-    );
-
-    let dec = new TextDecoder();
-    return dec.decode( decrypted );
-}
 
 sendToGPTButton.addEventListener( "click", async () => {
     // console.log( "sendToGPT" );
@@ -65,25 +29,20 @@ sendToGPTButton.addEventListener( "click", async () => {
     responseSpan.innerText = 'Checking OpenAI Key...';
     errorSpan.innerText = "";
 
-    keyPair = await generateKey();
-
-    let encryptedKey = JSON.parse( localStorage.getItem( KEY ) );
-    let keyArray = [];
-    Object.keys( encryptedKey ).forEach( idx => keyArray.push( encryptedKey[ idx ] ) );
-    let intArray = new Uint8Array( keyArray );
-
-    let decryptKey = await decryptMessage( keyPair.privateKey, intArray );
-    console.log( decryptKey );
-
-    let openAIKey = localStorage.getItem( "openAIKey" );
-
-
-    if( ! openAIKey ) {
-        console.log( "openAIKey is empty!" );
+    let storedKey = localStorage.getItem( KEY );
+    if( ! storedKey ) {
+        spinner.style.display = "none";
         responseSpan.innerText = '';
         errorSpan.innerText = "Please set an OpenAI key!";
         return;
     }
+
+    let encodedKey = JSON.parse( storedKey );
+    let keyArray = [];
+    Object.keys( encodedKey ).forEach( idx => keyArray.push( encodedKey[ idx ] ) );
+    let intArray = new Uint8Array( keyArray );
+    let dec = new TextDecoder();
+    let openAIKey = dec.decode( intArray );
 
     responseSpan.innerText = 'Checking current page...';
 
