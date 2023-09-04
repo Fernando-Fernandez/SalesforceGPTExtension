@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- <link rel="stylesheet" href="./popup.css" /> -->
+    <link rel="stylesheet" href="./popup.css" />
   </head>
   <body style="width: 400px;" >
     <template id="li_template">
@@ -16,7 +16,7 @@
       </li>
     </template>
 
-    <h1>Salesforce GPT Extension</h1>
+    <h1>GPT Extension for Salesforce</h1>
     <span id="error" style="font-weight: bold; color: red;" ></span>
     <br />
 
@@ -30,6 +30,7 @@
     <ul></ul>
 
     <br />
+    <div id="spinner" class="lds-dual-ring"></div>
     <span id="response" > </span>
 
     <script src="./scripts/popup.js" type="module"></script>

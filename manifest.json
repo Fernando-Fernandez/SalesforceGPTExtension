@@ -57,7 +57,7 @@
         "type": "module"
     },
 
-    "permissions": [ "activeTab", "scripting", "cookies" ],
+    "permissions": [ "activeTab", "cookies" ],
     "host_permissions": [
       "https://*.salesforce.com/*",
       "https://*.visual.force.com/*",

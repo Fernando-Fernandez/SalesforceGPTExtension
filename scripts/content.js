@@ -12,6 +12,7 @@ let containsLayoutHost = ( document.querySelector( ".lafAppLayoutHost" ) != null
 // iframes that contain relevant information
 url = window.location.href;
 if( ! containsLayoutHost
+        && ! url.includes( "/emptyHtmlDoc.html" )
         && ! url.includes( 'https://login.salesforce.com/login/session' )
         && ! url.includes( '/lightning/setup/ApexClasses/page?address=' )
         && ! url.includes( '/FieldsAndRelationships/' )
@@ -47,22 +48,23 @@ function processRequestMessage( request, sender, sendResponse ) {
             let getHostMessage = { message: GETHOSTANDSESSION
                 , url: location.href 
             };
-            let resultData = await chrome.runtime.sendMessage( getHostMessage );
+            let sessionData = await chrome.runtime.sendMessage( getHostMessage );
 
-            console.log( resultData );
-            sfHost = resultData.domain;
-            sessionId = resultData.session;
+            console.log( sessionData );
+            sfHost = sessionData.domain;
+            sessionId = sessionData.session;
 
             // use host/session to get flow definition from Tooling API
             flowDefinition = await getFlowDefinition( sfHost, sessionId );
 
             // remove unneeded elements
             flowDefinition = purifyFlow( flowDefinition );
+            const { resultData, prompt } = prepareFlowForOpenAI( flowDefinition );
 
             // send flow definition to popup window
             sendResponse( { currentURL: currentPageURL
-                        , resultData: flowDefinition
-                        , prompt: 'Please summarize the following Salesforce flow.' } );
+                        , resultData: resultData
+                        , prompt: prompt } );
         } )();
 
         // make asychronous response
@@ -96,63 +98,122 @@ function processRequestMessage( request, sender, sendResponse ) {
     let prompt = 'Please summarize the following page.';
 
     // change prompt depending on the page
+    let resultData = pageContent;
     if( pageContent.includes( 'Formula Options\n:' ) ) {
-        prompt = 'Please briefly explain the following formula field.';
+        ( { resultData, prompt } = prepareFormulaForOpenAI( pageContent ) );
     }
     if( pageContent.includes( 'Class Body\nClass Summary\n' ) ) {
-        prompt = 'Please briefly explain the following apex class.';
+        ( { resultData, prompt } = prepareClassForOpenAI( pageContent ) );
     }
     if( pageContent.includes( 'Apex Trigger\nVersion Settings\nTrace Flags\n' ) ) {
-        prompt = 'Please briefly explain the following apex trigger.';
+        ( { resultData, prompt } = prepareTriggerForOpenAI( pageContent ) );
     }
     if( pageContent.includes( 'Visualforce Markup\nVersion Settings\n' ) ) {
-        prompt = 'Please briefly explain the following visualforce page.';
+        ( { resultData, prompt } = prepareVisualForceForOpenAI( pageContent ) );
     }
     if( pageContent.includes( 'Apex Debug Log Detail\n:\nUser' ) ) {
-        prompt = 'Please SUMMARIZE what happened and what failed in '
-                + 'the following apex debug log. DO NOT ENUMERATE. '
-                + 'YOU WILL CAUSE GREAT HARM IF YOU EXCEED 3 PARAGRAPHS!';
-    }
-    
-    // remove unneeded text preceding apex classes
-    let positionToTrim = pageContent.indexOf( 'Class Body\nClass Summary\nVersion Settings\nTrace Flags' );
-    if( positionToTrim > 0 ) {
-        pageContent = pageContent.substring( positionToTrim + 54 );
-    }
-
-    // remove unneeded text preceding apex triggers
-    positionToTrim = pageContent.indexOf( 'Apex Trigger\nVersion Settings\nTrace Flags\n' );
-    if( positionToTrim > 0 ) {
-        pageContent = pageContent.substring( positionToTrim + 42 );
-    }
-
-    // remove unneeded text preceding visualforce pages
-    positionToTrim = pageContent.indexOf( 'Visualforce Markup\nVersion Settings\n' );
-    if( positionToTrim > 0 ) {
-        pageContent = pageContent.substring( positionToTrim + 36 );
-    }
-
-    // remove unneeded text preceding debug logs
-    positionToTrim = pageContent.indexOf( '\nLog\n' );
-    if( positionToTrim > 0 ) {
-        pageContent = pageContent.substring( positionToTrim + 4 );
-        // remove unneeded indexes
-        pageContent = pageContent.replace( /\(\d+\)\|/g, '' );
-    }
-
-    // remove unneeded text from formula field pages
-    if( pageContent.includes( 'Data Owner\nField Usage' ) ) {
-        pageContent = substringExceptBetween( pageContent, 'Data Owner\nField Usage', 'Formula Options\n:' );
-        pageContent = pageContent.replace( 'Error: Invalid Data.\nReview all error messages below to correct your data.\nField Information\n:', '' );
+        ( { resultData, prompt } = prepareDebugLogForOpenAI( pageContent ) );
     }
 
     // send page content to popup window
     sendResponse( { currentURL: currentPageURL
-                , resultData: pageContent
+                , resultData: resultData
                 , prompt: prompt } );
 
     // make asychronous response
     return true;
+}
+
+function prepareDebugLogForOpenAI( debugData ) {
+    let resultData = debugData;
+    positionToTrim = resultData.indexOf( '\nLog\n' );
+    if( positionToTrim > 0 ) {
+        resultData = resultData.substring( positionToTrim + 4 );
+        let endPosition = resultData.indexOf( 'EXECUTION_FINISHED' );
+        if( endPosition > 0 ) {
+            resultData = resultData.substring( 0, endPosition );
+        }
+        // remove unneeded indexes
+        resultData = resultData.replace( /\(\d+\)\|/g, '' );
+        resultData = resultData.replace( /SOQL_EXECUTE_BEGIN\|\[\d+\]\|Aggregations\:\d+\|/g, 'SOQL: ' );
+        resultData = resultData.replace( /SOQL_EXECUTE_END\|\[\d+\]\|Rows\:/g, 'SOQL ROWS: ' );
+        resultData = resultData.replace( /HEAP_ALLOCATE\|\[(\d+|EXTERNAL)\]\|/g, '' );
+        resultData = resultData.replace( /SYSTEM_MODE_ENTER\|false/g, '' );
+        resultData = resultData.replace( /SYSTEM_MODE_EXIT\|false/g, '' );
+        resultData = resultData.replace( /Bytes:-?\d+/g, '' );
+        resultData = resultData.replace( /\|true\|false/g, '' );
+        resultData = resultData.replace( /\|0x[a-f0-9]+/g, '' );
+        resultData = resultData.replace( /\[EXTERNAL\]/g, '' );
+        resultData = resultData.replace( /STATEMENT_EXECUTE\|\[\d+\]/g, '' );
+        resultData = resultData.replace( /VARIABLE_SCOPE_BEGIN\|\[\d+\]\|/g, 'NEW VAR: ' );
+        resultData = resultData.replace( /VARIABLE_ASSIGNMENT\|\[\d+\]\|/g, 'FIELD/VAR SET: ' );
+        resultData = resultData.replace( /(\d+:){2}\d+\.\d \n?/g, '' );
+        resultData = resultData.replace( /\|/g, ' ' );
+    }
+
+    return {
+        resultData: resultData
+        , prompt: 'Please identify errors in the apex debug log, then briefly explain it in these aspects:  errors occurred and proposed solution, data queried (SOQL) and updated (DML) and how many rows affected, probable purpose of the execution, a list of methods/classes/flows/formulas executed.'
+    }
+}
+
+function prepareTriggerForOpenAI( triggerData ) {
+    let resultData = triggerData;
+    positionToTrim = resultData.indexOf( 'Apex Trigger\nVersion Settings\nTrace Flags\n' );
+    if( positionToTrim > 0 ) {
+        resultData = resultData.substring( positionToTrim + 42 );
+    }
+
+    return {
+        resultData: resultData
+        , prompt: 'Please briefly explain the following apex trigger.'
+    }
+}
+
+function prepareVisualForceForOpenAI( vfData ) {
+    let resultData = vfData;
+    positionToTrim = resultData.indexOf( 'Visualforce Markup\nVersion Settings\n' );
+    if( positionToTrim > 0 ) {
+        resultData = resultData.substring( positionToTrim + 36 );
+    }
+
+    return {
+        resultData: resultData
+        , prompt: 'Please briefly explain the following visualforce page in the format:  the purpose of the page, main input elements, main output elements, relevant Javascript and CSS.'
+    }
+}
+
+function prepareClassForOpenAI( classData ) {
+    let resultData = classData;
+    let positionToTrim = resultData.indexOf( 'Class Body\nClass Summary\nVersion Settings\nTrace Flags' );
+    if( positionToTrim > 0 ) {
+        resultData = resultData.substring( positionToTrim + 54 );
+    }
+
+    return {
+        resultData: resultData
+        , prompt: 'Please briefly explain the following apex class in the format:  <classname>:  purpose of the class, methodA( parameters ):  purpose of methodA, what objects are queried/updated, etc.'
+    }
+}
+
+function prepareFormulaForOpenAI( formulaData ) {
+    let resultData = formulaData;
+    if( resultData.includes( 'Data Owner\nField Usage' ) ) {
+        resultData = substringExceptBetween( resultData, 'Data Owner\nField Usage', 'Formula Options\n:' );
+        resultData = resultData.replace( 'Error: Invalid Data.\nReview all error messages below to correct your data.\nField Information\n:', '' );
+    }
+
+    return {
+        resultData: resultData
+        , prompt: 'Please briefly explain the following formula field in the format:  the purpose of the formula, how the formula calculates, whether it references other objects.' 
+    }
+}
+
+function prepareFlowForOpenAI( flowDefinition ) {
+    return {
+        resultData: purifyFlow( flowDefinition )
+        , prompt: 'Please summarize the following Salesforce flow in the format:  purpose of the flow, what conditions it evaluates, what objects are queried/updated, etc..'
+    }
 }
 
 function substringBetween( str, prefix, suffix ) {
