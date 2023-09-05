@@ -1,0 +1,8 @@
+TODO:
+
+check if payload is bigger than 32600 and pick gpt-4-32k
+improve prompts
+make prompts configurable/saveable
+have more than one prompt:  explain, ask a question about the code
+add more page handlers
+make the extension use Tooling API more (debug could pull source code and add to debug)

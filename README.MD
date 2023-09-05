@@ -1,4 +1,4 @@
-## Salesforce GPT Extension
+## GPT Extension for Salesforce
 
 # Gets a GPT answer about a Salesforce item (flow, debug, class, formula, etc).
 
