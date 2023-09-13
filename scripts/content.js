@@ -13,7 +13,7 @@ let containsLayoutHost = ( document.querySelector( ".lafAppLayoutHost" ) != null
 url = window.location.href;
 if( ! containsLayoutHost
         && ! url.includes( "/emptyHtmlDoc.html" )
-        && ! url.includes( 'https://login.salesforce.com/login/session' )
+        && ! url.includes( 'salesforce.com/login/session' )
         && ! url.includes( '/lightning/setup/ApexClasses/page?address=' )
         && ! url.includes( '/FieldsAndRelationships/' )
         && ! url.includes( '/lightning/setup/ApexTriggers/page?address=' ) 
@@ -140,6 +140,9 @@ function prepareDebugLogForOpenAI( debugData ) {
         resultData = resultData.replace( /HEAP_ALLOCATE\|\[(\d+|EXTERNAL)\]\|/g, '' );
         resultData = resultData.replace( /SYSTEM_MODE_ENTER\|false/g, '' );
         resultData = resultData.replace( /SYSTEM_MODE_EXIT\|false/g, '' );
+        resultData = resultData.replace( /FLOW_CREATE_INTERVIEW_BEGIN\|.*?\|.*?\|.*?/g, '' );
+        resultData = resultData.replace( /FLOW_CREATE_INTERVIEW_END\|.*?\|/g, '' );
+        resultData = resultData.replace( /.*?_LIMIT_USAGE\|/g, '' );
         resultData = resultData.replace( /Bytes:-?\d+/g, '' );
         resultData = resultData.replace( /\|true\|false/g, '' );
         resultData = resultData.replace( /\|0x[a-f0-9]+/g, '' );
