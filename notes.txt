@@ -6,3 +6,6 @@ make prompts configurable/saveable
 have more than one prompt:  explain, ask a question about the code
 add more page handlers
 make the extension use Tooling API more (debug could pull source code and add to debug)
+add comments from GPT to code/flow/field
+filter apex classes better (at the end)
+use crypto.randomUUID to get an user id to hash the OpenAI key

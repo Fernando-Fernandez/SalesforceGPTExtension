@@ -26,8 +26,18 @@
     <button id="setKey" >Set OpenAI key</button>
     <br /><br />
 
+    <label for="gptQuestion" >Ask your question or leave blank for default prompt:</label>
+    <input id="gptQuestion" />
+
     <button id="sendToGPT" >Ask GPT to Explain</button>
     <ul></ul>
+
+    <div>
+      <input type="radio" id="gptVersion" name="gpt-version" value="gpt-3.5-turbo" checked>
+      <label for="gpt-3.5-turbo">gpt-3.5-turbo</label>
+      <input type="radio" id="gpt-4o" name="gpt-version" value="gpt-4o">
+      <label for="gpt-4o">gpt-4o</label>
+    </div>
 
     <br />
     <div id="spinner" class="lds-dual-ring"></div>

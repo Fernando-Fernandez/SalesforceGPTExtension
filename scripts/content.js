@@ -50,7 +50,7 @@ function processRequestMessage( request, sender, sendResponse ) {
             };
             let sessionData = await chrome.runtime.sendMessage( getHostMessage );
 
-            console.log( sessionData );
+            // console.log( sessionData );
             sfHost = sessionData.domain;
             sessionId = sessionData.session;
 
@@ -233,8 +233,9 @@ function getChildrenTextNodes( element ) {
     let aNode = treeWalker.nextNode();
     while( aNode ) {
         // skip STYLE/SCRIPT elements
-        if( aNode.parentNode.tagName != 'STYLE'
-                && aNode.parentNode.tagName != 'SCRIPT' ) {
+        let parentTag = aNode?.parentNode?.tagName;
+        if( parentTag != 'STYLE'
+                && parentTag != 'SCRIPT' ) {
             nodeArray.push( aNode );
         }
         aNode = treeWalker.nextNode();

@@ -65,8 +65,17 @@ sendToGPTButton.addEventListener( "click", async () => {
         chrome.tabs.sendMessage( tab.id, { message: GETDATA }, function( response ) {
             // console.log( response );
             responseSpan.innerText = 'Preparing prompt for GPT...';
+
+            // check custom prompt
+            let prompt;
+            let gptQuestion = document.getElementById( 'gptQuestion' );
+            if( gptQuestion && gptQuestion.value ) {
+                response.prompt = gptQuestion.value;
+            }
+
+            let gptModel = document.querySelector( 'input[name="gpt-version"]:checked' ).value;
     
-            sendToGPT( response, openAIKey );
+            sendToGPT( response, openAIKey, gptModel );
         } );
         return;
     } )();
@@ -74,7 +83,7 @@ sendToGPTButton.addEventListener( "click", async () => {
     return;
 });
 
-function sendToGPT( dataObject, openAIKey ) {
+function sendToGPT( dataObject, openAIKey, gptModel ) {
     try {
         if( ! dataObject ) {
             responseSpan.innerText = 'No data received from current page.';
@@ -109,10 +118,10 @@ function sendToGPT( dataObject, openAIKey ) {
         // use parameters recommended for Code Comment Generation
         let temperature = 0.3;  // was 1;
         let top_p = 0.2; // was 1;
-        let max_tokens = 300; // was 256 
+        let max_tokens = 2000; //  was 256, then 300
         let frequency_penalty = 0;
         let presence_penalty = 0;
-        let model = 'gpt-3.5-turbo';
+        let model = ( gptModel ? gptModel : 'gpt-3.5-turbo' );
         let systemPrompt = 'You are an expert at troubleshooting and explaining code.';  // was 'You are a helpful assistant.';
 
         // replace characters that would invalidate the JSON payload‘
@@ -122,18 +131,20 @@ function sendToGPT( dataObject, openAIKey ) {
                                 .replaceAll( '\t', ' ' ).replaceAll( '   ', ' ' );
 
         // check size of data and select a bigger model as needed
-        if( data.length > 3900 ) {
-            // TODO:  check if bigger than 32600 and pick gpt-4-32k
+        if( data.length > 16200 ) {
 
-            model = 'gpt-3.5-turbo-16k';
+            model = 'gpt-4o'; // 'gpt-3.5-turbo-16k';
             // truncate data as needed
-            if( data.length > 16200 ) {
-                data = data.substring( 0, 16200 );
+            if( data.length > 130872 ) {
+                data = data.substring( 0, 130872 );
             }
         }
 
         // build prompt with current page data in a request
-        let payload = `{ "model":"${model}","messages":[{"role":"system","content":"${systemPrompt}"},{"role":"user","content":"${prompt} ${data}"}],"temperature": ${temperature},"max_tokens":${max_tokens},"top_p":${top_p},"frequency_penalty":${frequency_penalty},"presence_penalty":${presence_penalty} }`;
+        // let payload = `{ "model":"${model}","messages":[{"role":"system","content":"${systemPrompt}"},{"role":"user","content":"${prompt} ${data}"}],"temperature": ${temperature},"max_tokens":${max_tokens},"top_p":${top_p},"frequency_penalty":${frequency_penalty},"presence_penalty":${presence_penalty} }`;
+        let sysMessage = `{"role":"system","content":[{"type":"text","text":"${systemPrompt}"}]}`;
+        let userMessage = `{"role":"user","content":[{"type":"text","text":"${prompt} ${data}"}]}`;
+        let payload = `{ "model":"${model}","messages":[${sysMessage},${userMessage}],"temperature": ${temperature},"max_tokens":${max_tokens},"top_p":${top_p},"frequency_penalty":${frequency_penalty},"presence_penalty":${presence_penalty} }`;
 
         // prepare request
         let url = "https://api.openai.com/v1/chat/completions";
