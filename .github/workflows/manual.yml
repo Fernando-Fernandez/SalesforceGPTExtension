@@ -28,8 +28,8 @@ jobs:
       uses: actions/checkout@main
     - name: create folders
       run: |
-        mkdir ./dist
-        mkdir ./dist/${{ inputs.param }}
+        mkdir -p ./dist
+        mkdir -p ./dist/${{ inputs.param }}
     - name: copy files
       run: |
         cp -r ./images ./dist/${{ inputs.param }}/images
