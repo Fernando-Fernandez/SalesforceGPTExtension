@@ -17,7 +17,19 @@ jobs:
   createZip:
     runs-on: ubuntu-latest
 
-    steps:
-    # Runs a single command using the runners shell
+    steps:    
+    - name: 'Checkout source code'
+      uses: actions/checkout@main
+    - name: copy files
+      run: |
+        echo ${{ github.repository }}
+        mkdir ./dist/${{ inputs.param }}
+        cp ./images ./dist/${{ inputs.param }}/images
+        cp ./scripts ./dist/${{ inputs.param }}/scripts
+        cp LICENSE ./dist/${{ inputs.param }}/LICENSE
+        cp README.MD ./dist/${{ inputs.param }}/README.MD
+        cp manifest.json ./dist/${{ inputs.param }}/manifest.json
+        cp popup.css ./dist/${{ inputs.param }}/popup.css
+        cp popup.html ./dist/${{ inputs.param }}/popup.html
     - name: Send greeting
       run: echo "Hello ${{ inputs.param }}"
