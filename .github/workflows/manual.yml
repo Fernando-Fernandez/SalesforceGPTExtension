@@ -25,8 +25,8 @@ jobs:
         echo ${{ github.repository }}
         mkdir ./dist
         mkdir ./dist/${{ inputs.param }}
-        cp ./images ./dist/${{ inputs.param }}/images
-        cp ./scripts ./dist/${{ inputs.param }}/scripts
+        cp -r ./images ./dist/${{ inputs.param }}/images
+        cp -r ./scripts ./dist/${{ inputs.param }}/scripts
         cp LICENSE ./dist/${{ inputs.param }}/LICENSE
         cp README.MD ./dist/${{ inputs.param }}/README.MD
         cp manifest.json ./dist/${{ inputs.param }}/manifest.json
