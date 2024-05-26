@@ -1,0 +1,23 @@
+# workflow is manually triggered
+
+name: Create zip file for publishing
+
+on:
+  workflow_dispatch:
+    # Inputs the workflow accepts.
+    inputs:
+      param:
+        # Friendly description for the UI instead of 'param'
+        description: 'Name of the zip file'
+        default: 'SalesforceGPTExtension'
+        required: true
+        type: string
+
+jobs:
+  createZip:
+    runs-on: ubuntu-latest
+
+    steps:
+    # Runs a single command using the runners shell
+    - name: Send greeting
+      run: echo "Hello ${{ inputs.param }}"
