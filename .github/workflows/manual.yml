@@ -42,8 +42,8 @@ jobs:
       run: |
         # Stage the files, commit and push
         #git init
-        #git config user.email "${{ env.owner_email }}"
-        #git config user.name "${{ github.repository_owner }}"
+        git config user.email "${{ env.owner_email }}"
+        git config user.name "${{ github.repository_owner }}"
         git add ./dist/${{ inputs.param }}.zip
         git commit -m "Added zip file"
         # executes git push origin main
