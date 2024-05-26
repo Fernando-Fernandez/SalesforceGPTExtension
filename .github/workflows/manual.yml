@@ -20,11 +20,12 @@ jobs:
     steps:    
     - name: 'Checkout source code'
       uses: actions/checkout@main
-    - name: copy files
+    - name: create folders
       run: |
-        echo ${{ github.repository }}
         mkdir ./dist
         mkdir ./dist/${{ inputs.param }}
+    - name: copy files
+      run: |
         cp -r ./images ./dist/${{ inputs.param }}/images
         cp -r ./scripts ./dist/${{ inputs.param }}/scripts
         cp LICENSE ./dist/${{ inputs.param }}/LICENSE
@@ -33,4 +34,16 @@ jobs:
         cp popup.css ./dist/${{ inputs.param }}/popup.css
         cp popup.html ./dist/${{ inputs.param }}/popup.html
     - name: zip files
-      run: zip -r ${{ inputs.param }}.zip ./dist/${{ inputs.param }}
+      run: |
+        cd ./dist
+        zip -r ${{ inputs.param }}.zip ./${{ inputs.param }}
+    - name: commit and push
+      run: |
+        # Stage the files, commit and push
+        git init
+        git config user.email "${{ env.owner_email }}"
+        git config user.name "${{ github.repository_owner }}"
+        git add ${{ inputs.param }}.zip
+        git commit -m "Added zip file"
+        # executes git push origin main
+        echo "git-push=$(git push -u origin main)\n" >> $GITHUB_OUTPUT
