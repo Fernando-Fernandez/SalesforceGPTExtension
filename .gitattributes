@@ -1,0 +1,13 @@
+# Exclude files from exporting/zip
+.gitattributes export-ignore
+.gitignore     export-ignore
+.github        export-ignore
+.gitkeep       export-ignore
+.sfdx          export-ignore
+sampleFlow.json export-ignore
+test key.txt   export-ignore
+notes.txt      export-ignore
+debugLogExample1.log export-ignore
+flowExample1.json export-ignore
+dist           export-ignore
+openAIKey.txt  export-ignore
