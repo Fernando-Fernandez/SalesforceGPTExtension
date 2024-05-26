@@ -32,5 +32,5 @@ jobs:
         cp manifest.json ./dist/${{ inputs.param }}/manifest.json
         cp popup.css ./dist/${{ inputs.param }}/popup.css
         cp popup.html ./dist/${{ inputs.param }}/popup.html
-    - name: Send greeting
-      run: echo "Hello ${{ inputs.param }}"
+    - name: zip files
+      run: zip -r ${{ inputs.param }}.zip ./dist/${{ inputs.param }}
