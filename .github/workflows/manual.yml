@@ -23,6 +23,7 @@ jobs:
     - name: copy files
       run: |
         echo ${{ github.repository }}
+        mkdir ./dist
         mkdir ./dist/${{ inputs.param }}
         cp ./images ./dist/${{ inputs.param }}/images
         cp ./scripts ./dist/${{ inputs.param }}/scripts
