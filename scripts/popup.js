@@ -63,6 +63,10 @@ sendToGPTButton.addEventListener( "click", async () => {
         let tab = tabs[ 0 ];
         // console.log( 'calling getData from focused tab' );
         chrome.tabs.sendMessage( tab.id, { message: GETDATA }, function( response ) {
+            if( ! response ) {
+                responseSpan.innerText = 'Could not identify page.';
+                return;
+            }
             // console.log( response );
             responseSpan.innerText = 'Preparing prompt for GPT...';
 
