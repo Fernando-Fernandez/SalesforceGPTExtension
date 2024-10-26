@@ -2,7 +2,7 @@ const GETHOSTANDSESSION = "getHostSession";
 
 // message handler to retrieve host and session id from Salesforce cookies
 chrome.runtime.onMessage.addListener( ( message, sender, responseCallback ) => {
-    // debugger;
+    debugger;
     if( message.message == GETHOSTANDSESSION ) {
         getHostAndSession( message, sender, responseCallback );
         return true;

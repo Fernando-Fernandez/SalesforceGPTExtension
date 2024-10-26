@@ -6,7 +6,8 @@ const TOOLING_API_VERSION = 'v57.0';
 let sfHost, sessionId, flowDefinition, url;
 
 // pages with layout host are just surrounding the iframe that contains relevant information
-let containsLayoutHost = ( document.querySelector( ".lafAppLayoutHost" ) != null );
+// Salesforce changed the above
+let containsLayoutHost = false; // ( document.querySelector( ".lafAppLayoutHost" ) != null );
 
 // only add message handlers to 
 // iframes that contain relevant information
@@ -20,6 +21,12 @@ if( ! containsLayoutHost
         && ! url.includes( '/lightning/setup/ApexPages/page?address=' )
         && ! url.includes( '/setup/ui/listApexTraces.apexp' )
         && ! url.includes( '/lightning/setup/ApexDebugLogDetail/page?address=' ) ) {
+    // prime the connection
+    chrome.runtime.onConnect.addListener(port => {
+        port.onMessage.addListener(msg => {
+            console.log( msg );
+        });
+    });
     // make current window listen to requests from the extension popup window
     chrome.runtime.onMessage.addListener(
         processRequestMessage

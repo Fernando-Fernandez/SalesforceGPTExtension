@@ -8,6 +8,8 @@ const KEY = 'hashedKey';
 
 errorSpan.innerText = "";
 spinner.style.display = "none";
+let retryCounter = 0;
+let tabId = null;
 
 setKeyButton.addEventListener( "click", async () => {
     // console.log( "setKeyButton" );
@@ -49,7 +51,11 @@ sendToGPTButton.addEventListener( "click", async () => {
     // get current page data from the page itself
     ( async () => {
         // get last focused tab
-        const tabs = await chrome.tabs.query( { active: true, lastFocusedWindow: true } );
+        let tabs = await chrome.tabs.query( { active: true, lastFocusedWindow: true } );
+
+        if( tabs.length <= 0 ) {
+            tabs = await chrome.tabs.query( { active: true, currentWindow: true } );
+        }
 
         if( tabs.length <= 0 ) {
             responseSpan.innerText = 'No active tab found...';
@@ -62,35 +68,60 @@ sendToGPTButton.addEventListener( "click", async () => {
         // get data from last focused tab
         let tab = tabs[ 0 ];
         // console.log( 'calling getData from focused tab' );
-        chrome.tabs.sendMessage( tab.id, { message: GETDATA }, function( response ) {
-            if( ! response ) {
-                responseSpan.innerText = 'Could not identify page.';
-                return;
-            }
-            // console.log( response );
-            responseSpan.innerText = 'Preparing prompt for GPT...';
-
-            // check custom prompt
-            let prompt;
-            let gptQuestion = document.getElementById( 'gptQuestion' );
-            if( gptQuestion && gptQuestion.value ) {
-                response.prompt = gptQuestion.value;
-            }
-
-            let gptModel = document.querySelector( 'input[name="gpt-version"]:checked' ).value;
-    
-            sendToGPT( response, openAIKey, gptModel );
-        } );
+        retryCounter = 0;
+        tabId = tab.id;
+        sendMessageToBackground( openAIKey );
+        // chrome.tabs.sendMessage( tab.id, { message: GETDATA }, function( response ) { 
+        //     processDataFromTab( response, openAIKey ); 
+        // } );
         return;
     } )();
 
     return;
 });
 
+function sendMessageToBackground( openAIKey ) {
+    chrome.tabs.sendMessage( tabId, { message: GETDATA }, function( response ) { 
+        processDataFromTab( response, openAIKey ); 
+    } );
+}
+
+function processDataFromTab( response, openAIKey ) {
+    if( chrome.runtime.lastError ) {
+        console.error( chrome.runtime.lastError.message );
+    }
+    // if( chrome.runtime.lastError && retryCounter < 1 ) {
+    //     console.error( chrome.runtime.lastError.message );
+    //     retryCounter ++;
+    //     // method without parameters is the only way to use setTimeout in browser extensions now
+    //     setTimeout( sendMessageToBackground, 1000 );
+    //     return;
+    // }
+
+    if( ! response ) {
+        responseSpan.innerText = 'Could not obtain tab information.';
+        spinner.style.display = "none";
+        return;
+    }
+    // console.log( response );
+    responseSpan.innerText = 'Preparing prompt for GPT...';
+
+    // check custom prompt
+    let prompt;
+    let gptQuestion = document.getElementById( 'gptQuestion' );
+    if( gptQuestion && gptQuestion.value ) {
+        response.prompt = gptQuestion.value;
+    }
+
+    let gptModel = document.querySelector( 'input[name="gpt-version"]:checked' ).value;
+
+    sendToGPT( response, openAIKey, gptModel );
+}
+
 function sendToGPT( dataObject, openAIKey, gptModel ) {
     try {
         if( ! dataObject ) {
-            responseSpan.innerText = 'No data received from current page.';
+            responseSpan.innerText = 'No data found received from current page.';
             spinner.style.display = "none";
             return;
         }
@@ -98,7 +129,7 @@ function sendToGPT( dataObject, openAIKey, gptModel ) {
         let { currentURL, resultData, prompt } = dataObject;
 
         if( ! resultData ) {
-            responseSpan.innerText = 'No data to send.';
+            responseSpan.innerText = 'No data found to send to GPT.';
             spinner.style.display = "none";
             return;
         }
@@ -188,7 +219,8 @@ function sendToGPT( dataObject, openAIKey, gptModel ) {
                                         );
 
                 // display response 
-                responseSpan.innerText = 'OpenAI: ' + parsedResponse;
+                responseSpan.innerText = parsedResponse;
+                convertResponseFromMarkdown();
                 spinner.style.display = "none";
             }
         };
@@ -198,4 +230,11 @@ function sendToGPT( dataObject, openAIKey, gptModel ) {
         responseSpan.innerText = e.message;
         spinner.style.display = "none";
     }
+}
+
+function convertResponseFromMarkdown() {
+    const span = document.getElementById( "response" );
+
+    // Replace **text** with <b>text</b>
+    span.innerHTML = span.innerHTML.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>");
 }

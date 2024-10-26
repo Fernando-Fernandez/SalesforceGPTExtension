@@ -21,8 +21,8 @@
     "commands": {
         "_execute_action": {
             "suggested_key": {
-                "default": "Ctrl+B",
-                "mac": "Command+B"
+                "default": "Ctrl+J",
+                "mac": "Command+J"
             }
         }
     },
@@ -32,8 +32,10 @@
           "scripts/content.js"
         ]
         , "type": "module"
+        , "run_at": "document_start"
         , "matches": [
           "https://*.salesforce.com/*",
+          "https://*.salesforce-setup.com/*",
           "https://*.visual.force.com/*",
           "https://*.lightning.force.com/*",
           "https://*.cloudforce.com/*",
@@ -45,6 +47,7 @@
     "web_accessible_resources": [ {
       "matches": [ 
         "https://*.salesforce.com/*",
+        "https://*.salesforce-setup.com/*",
         "https://*.visual.force.com/*",
         "https://*.lightning.force.com/*",
         "https://*.cloudforce.com/*",
@@ -60,6 +63,7 @@
     "permissions": [ "activeTab", "cookies" ],
     "host_permissions": [
       "https://*.salesforce.com/*",
+      "https://*.salesforce-setup.com/*",
       "https://*.visual.force.com/*",
       "https://*.lightning.force.com/*",
       "https://*.cloudforce.com/*",
