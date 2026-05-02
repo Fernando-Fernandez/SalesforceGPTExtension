@@ -1,46 +1,31 @@
 const GETHOSTANDSESSION = "getHostSession";
 
-// message handler to retrieve host and session id from Salesforce cookies
 chrome.runtime.onMessage.addListener( ( message, sender, responseCallback ) => {
-    if( message.message == GETHOSTANDSESSION ) {
-        getHostAndSession( message, sender, responseCallback );
+    if( message.message === GETHOSTANDSESSION ) {
+        getHostAndSession( message.url, sender.tab.cookieStoreId )
+            .then( responseCallback );
         return true;
     }
-
     return false;
-});
+} );
 
-function getHostAndSession( message, sender, responseCallback ) {
-    // first, get org id from unsecure cookie
-    let cookieDetails = { name: "sid"
-                        , url: message.url
-                        , storeId: sender.tab.cookieStoreId 
-                    };
-    chrome.cookies.get( cookieDetails, cookie => {
-        if( ! cookie ) {
-            responseCallback( null );
-            return;
-        }
+async function getHostAndSession( url, cookieStoreId ) {
+    // get the session cookie for the current tab's org
+    const cookie = await chrome.cookies.get( { name: 'sid', url, storeId: cookieStoreId } );
+    if( !cookie ) return null;
 
-        // try getting all secure cookies from salesforce.com and find the one matching our org id
-        // (we may have more than one org open in different tabs or cookies from past orgs/sessions)
-        let [ orgId ] = cookie.value.split( "!" );
-        let secureCookieDetails = { name: "sid"
-                                    , domain: "salesforce.com"
-                                    , secure: true
-                                    , storeId: sender.tab.cookieStoreId 
-                                };
-        chrome.cookies.getAll( secureCookieDetails, cookies => {
-            // find the cookie for our org
-            let sessionCookie = cookies.find( c => c.value.startsWith( orgId + "!" ) );
-            if( ! sessionCookie ) {
-                responseCallback( null );
-                return;
-            }
-                
-            responseCallback( { domain: sessionCookie.domain 
-                                , session:  sessionCookie.value
-                            } );
-        });
-    });
+    // the unsecured cookie value is "<orgId>!<token>" — extract the org prefix to
+    // match against the secure cookies, since multiple orgs may be open simultaneously
+    const [ orgId ] = cookie.value.split( '!' );
+    const candidates = await chrome.cookies.getAll( {
+        name:    'sid',
+        domain:  'salesforce.com',
+        secure:  true,
+        storeId: cookieStoreId
+    } );
+
+    const sessionCookie = candidates.find( c => c.value.startsWith( orgId + '!' ) );
+    if( !sessionCookie ) return null;
+
+    return { domain: sessionCookie.domain, session: sessionCookie.value };
 }

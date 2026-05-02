@@ -1,36 +1,29 @@
-const GETHOSTANDSESSION = "getHostSession";
-const SETDATA = "setData";
-const GETDATA = "getData";
+import { PROMPTS } from './prompts.js';
+
+const GETHOSTANDSESSION   = "getHostSession";
+const GETDATA             = "getData";
 const TOOLING_API_VERSION = 'v57.0';
 
-let sfHost, sessionId, flowDefinition, url;
+const EXCLUDED_URL_PATTERNS = [
+    '/emptyHtmlDoc.html',
+    'salesforce.com/login/session',
+    '/lightning/setup/ApexClasses/page?address=',
+    '/FieldsAndRelationships/',
+    '/lightning/setup/ApexTriggers/page?address=',
+    '/lightning/setup/ApexPages/page?address=',
+    '/setup/ui/listApexTraces.apexp',
+    '/lightning/setup/ApexDebugLogDetail/page?address='
+];
 
-// pages with layout host are just surrounding the iframe that contains relevant information
-// Salesforce changed the above
-let containsLayoutHost = false; // ( document.querySelector( ".lafAppLayoutHost" ) != null );
+// Keys that add noise without helping the LLM understand the flow
+const BLOCKED_FLOW_KEYS = new Set( [ 'apiVersion', 'locationX', 'locationY' ] );
 
-// only add message handlers to 
-// iframes that contain relevant information
-url = window.location.href;
-if( ! containsLayoutHost
-        && ! url.includes( "/emptyHtmlDoc.html" )
-        && ! url.includes( 'salesforce.com/login/session' )
-        && ! url.includes( '/lightning/setup/ApexClasses/page?address=' )
-        && ! url.includes( '/FieldsAndRelationships/' )
-        && ! url.includes( '/lightning/setup/ApexTriggers/page?address=' ) 
-        && ! url.includes( '/lightning/setup/ApexPages/page?address=' )
-        && ! url.includes( '/setup/ui/listApexTraces.apexp' )
-        && ! url.includes( '/lightning/setup/ApexDebugLogDetail/page?address=' ) ) {
-    // prime the connection
-    chrome.runtime.onConnect.addListener(port => {
-        port.onMessage.addListener(msg => {
-            console.log( msg );
-        });
-    });
-    // make current window listen to requests from the extension popup window
-    chrome.runtime.onMessage.addListener(
-        processRequestMessage
-    );
+const url = window.location.href;
+if( !EXCLUDED_URL_PATTERNS.some( p => url.includes( p ) ) ) {
+    chrome.runtime.onConnect.addListener( port => {
+        port.onMessage.addListener( () => {} );
+    } );
+    chrome.runtime.onMessage.addListener( processRequestMessage );
 }
 
 /////////
@@ -39,116 +32,79 @@ if( ! containsLayoutHost
 
 function processRequestMessage( request, sender, sendResponse ) {
     if( request.message !== GETDATA ) {
-        // make asychronous response
         return true;
     }
 
-    // get URL of current page
-    let currentPageURL = window.location.href;
+    const currentPageURL = window.location.href;
 
-    // if on a flow page, return flow definition
-    let flowIdArray = currentPageURL.match( /(?:flowId\=)(.*?)(?=&|$)/ );
+    // Code Builder (webconsole) — extract from the editor iframe
+    if( currentPageURL.includes( '/webconsole' ) ) {
+        const resultData = getCodeBuilderContent();
+        sendResponse( { currentURL: currentPageURL, resultData, prompt: PROMPTS.codeBuilder } );
+        return true;
+    }
+
+    // flow pages — fetch definition from Tooling API
+    const flowIdArray = currentPageURL.match( /(?:flowId=)(.*?)(?=&|$)/ );
     if( flowIdArray ) {
-        // get flow definition
+        const flowId = flowIdArray[ 1 ];
         ( async () => {
-            // request host and session from background script
-            let getHostMessage = { message: GETHOSTANDSESSION
-                , url: location.href 
-            };
-            let sessionData = await chrome.runtime.sendMessage( getHostMessage );
+            const sessionData = await chrome.runtime.sendMessage( { message: GETHOSTANDSESSION, url: location.href } );
+            const sfHost    = sessionData.domain;
+            const sessionId = sessionData.session;
 
-            // console.log( sessionData );
-            sfHost = sessionData.domain;
-            sessionId = sessionData.session;
+            const rawFlow = await getFlowDefinition( sfHost, sessionId, flowId );
+            const { resultData, prompt } = prepareFlowForOpenAI( rawFlow );
 
-            // use host/session to get flow definition from Tooling API
-            flowDefinition = await getFlowDefinition( sfHost, sessionId );
-
-            // remove unneeded elements
-            flowDefinition = purifyFlow( flowDefinition );
-            const { resultData, prompt } = prepareFlowForOpenAI( flowDefinition );
-
-            // send flow definition to popup window
-            sendResponse( { currentURL: currentPageURL
-                        , resultData: resultData
-                        , prompt: prompt } );
+            sendResponse( { currentURL: currentPageURL, resultData, prompt } );
         } )();
-
-        // make asychronous response
         return true;
     }
 
-    // get article or document node
-    let article = document.querySelector( "div#setupComponent" );
-    if( ! article ) {
-        article = document.querySelector( "article" );
-        if( ! article ) {
-            article = document.querySelector( "div#content" );
-            if( ! article ) {
-                article = document.querySelector( "body" );
-            }
-        }
-    }
+    // extract text from the best available container
+    const article = document.querySelector( 'div#setupComponent' )
+        || document.querySelector( 'article' )
+        || document.querySelector( 'div#content' )
+        || document.body;
 
-    // extract all text from document/article
-    let textNodes = getChildrenTextNodes( article );
-    let pageContent = textNodes.reduce( ( accumulator, currentValue ) => {
-        // skip empty lines, lines with only digits
-        let theText = currentValue.wholeText.trim();
-        if( theText == '\n' || theText == '×'
-                || theText == '' || /^\d+$/.test( theText ) ) {
-            return accumulator;
-        }
-        return accumulator + theText + '\n';
-    }, '' );
+    let pageContent = extractText( article );
 
     // prefer iframe content when available — Salesforce often renders the real
     // page content inside a same-origin iframe, leaving the parent with only
     // header/navigation UI
-    let iframeContent = getIframeTextContent();
+    const iframeContent = getIframeTextContent();
     if( iframeContent.length > pageContent.length ) {
         pageContent = iframeContent;
     }
 
-    let prompt = 'Please summarize the following page.';
-
-    // change prompt depending on the page
+    let prompt    = PROMPTS.default;
     let resultData = pageContent;
+
     if( pageContent.includes( 'Formula Options\n:' ) ) {
         ( { resultData, prompt } = prepareFormulaForOpenAI( pageContent ) );
-    }
-    if( pageContent.includes( 'Class Body\nClass Summary\n' ) ) {
+    } else if( pageContent.includes( 'Class Body\nClass Summary\n' ) ) {
         ( { resultData, prompt } = prepareClassForOpenAI( pageContent ) );
-    }
-    if( pageContent.includes( 'Apex Trigger\nVersion Settings\nTrace Flags\n' ) ) {
+    } else if( pageContent.includes( 'Apex Trigger\nVersion Settings\nTrace Flags\n' ) ) {
         ( { resultData, prompt } = prepareTriggerForOpenAI( pageContent ) );
-    }
-    if( pageContent.includes( 'Visualforce Markup\nVersion Settings\n' ) ) {
+    } else if( pageContent.includes( 'Visualforce Markup\nVersion Settings\n' ) ) {
         ( { resultData, prompt } = prepareVisualForceForOpenAI( pageContent ) );
-    }
-    if( pageContent.includes( 'Apex Debug Log Detail\n:\nUser' ) ) {
+    } else if( pageContent.includes( 'Apex Debug Log Detail\n:\nUser' ) ) {
         ( { resultData, prompt } = prepareDebugLogForOpenAI( pageContent ) );
     }
 
-    // send page content to popup window
-    sendResponse( { currentURL: currentPageURL
-                , resultData: resultData
-                , prompt: prompt } );
-
-    // make asychronous response
+    sendResponse( { currentURL: currentPageURL, resultData, prompt } );
     return true;
 }
 
 function prepareDebugLogForOpenAI( debugData ) {
     let resultData = debugData;
-    positionToTrim = resultData.indexOf( '\nLog\n' );
+    let positionToTrim = resultData.indexOf( '\nLog\n' );
     if( positionToTrim > 0 ) {
         resultData = resultData.substring( positionToTrim + 4 );
-        let endPosition = resultData.indexOf( 'EXECUTION_FINISHED' );
+        const endPosition = resultData.indexOf( 'EXECUTION_FINISHED' );
         if( endPosition > 0 ) {
             resultData = resultData.substring( 0, endPosition );
         }
-        // remove unneeded indexes
         resultData = resultData.replace( /\(\d+\)\|/g, '' );
         resultData = resultData.replace( /SOQL_EXECUTE_BEGIN\|\[\d+\]\|Aggregations\:\d+\|/g, 'SOQL: ' );
         resultData = resultData.replace( /SOQL_EXECUTE_END\|\[\d+\]\|Rows\:/g, 'SOQL ROWS: ' );
@@ -170,48 +126,48 @@ function prepareDebugLogForOpenAI( debugData ) {
     }
 
     return {
-        resultData: resultData
-        , prompt: 'Please identify errors in the apex debug log, then briefly explain it in these aspects:  errors occurred and proposed solution, data queried (SOQL) and updated (DML) and how many rows affected, probable purpose of the execution, a list of methods/classes/flows/formulas executed.'
-    }
+        resultData
+        , prompt: PROMPTS.debugLog
+    };
 }
 
 function prepareTriggerForOpenAI( triggerData ) {
     let resultData = triggerData;
-    positionToTrim = resultData.indexOf( 'Apex Trigger\nVersion Settings\nTrace Flags\n' );
+    const positionToTrim = resultData.indexOf( 'Apex Trigger\nVersion Settings\nTrace Flags\n' );
     if( positionToTrim > 0 ) {
         resultData = resultData.substring( positionToTrim + 42 );
     }
 
     return {
-        resultData: resultData
-        , prompt: 'Please briefly explain the following apex trigger.'
-    }
+        resultData
+        , prompt: PROMPTS.trigger
+    };
 }
 
 function prepareVisualForceForOpenAI( vfData ) {
     let resultData = vfData;
-    positionToTrim = resultData.indexOf( 'Visualforce Markup\nVersion Settings\n' );
+    const positionToTrim = resultData.indexOf( 'Visualforce Markup\nVersion Settings\n' );
     if( positionToTrim > 0 ) {
         resultData = resultData.substring( positionToTrim + 36 );
     }
 
     return {
-        resultData: resultData
-        , prompt: 'Please briefly explain the following visualforce page in the format:  the purpose of the page, main input elements, main output elements, relevant Javascript and CSS.'
-    }
+        resultData
+        , prompt: PROMPTS.visualforce
+    };
 }
 
 function prepareClassForOpenAI( classData ) {
     let resultData = classData;
-    let positionToTrim = resultData.indexOf( 'Class Body\nClass Summary\nVersion Settings\nTrace Flags' );
+    const positionToTrim = resultData.indexOf( 'Class Body\nClass Summary\nVersion Settings\nTrace Flags' );
     if( positionToTrim > 0 ) {
         resultData = resultData.substring( positionToTrim + 54 );
     }
 
     return {
-        resultData: resultData
-        , prompt: 'Please briefly explain the following apex class in the format:  <classname>:  purpose of the class, methodA( parameters ):  purpose of methodA, what objects are queried/updated, etc.'
-    }
+        resultData
+        , prompt: PROMPTS.apexClass
+    };
 }
 
 function prepareFormulaForOpenAI( formulaData ) {
@@ -222,16 +178,16 @@ function prepareFormulaForOpenAI( formulaData ) {
     }
 
     return {
-        resultData: resultData
-        , prompt: 'Please briefly explain the following formula field in the format:  the purpose of the formula, how the formula calculates, whether it references other objects.' 
-    }
+        resultData
+        , prompt: PROMPTS.formula
+    };
 }
 
-function prepareFlowForOpenAI( flowDefinition ) {
+function prepareFlowForOpenAI( rawFlow ) {
     return {
-        resultData: purifyFlow( flowDefinition )
-        , prompt: 'Please summarize the following Salesforce flow in the format:  purpose of the flow, what conditions it evaluates, what objects are queried/updated, etc..'
-    }
+        resultData: purifyFlow( rawFlow )
+        , prompt: PROMPTS.flow
+    };
 }
 
 function substringBetween( str, prefix, suffix ) {
@@ -242,23 +198,46 @@ function substringExceptBetween( str, prefix, suffix ) {
     return str.replace( substringBetween( str, prefix, suffix ), '' );
 }
 
+function extractText( element ) {
+    return getChildrenTextNodes( element ).reduce( ( acc, node ) => {
+        const text = node.wholeText.trim();
+        if( text === '' || text === '\n' || text === '×' || /^\d+$/.test( text ) ) {
+            return acc;
+        }
+        return acc + text + '\n';
+    }, '' );
+}
+
+function getCodeBuilderContent() {
+    const workbench = document.querySelector( 'runtime_developerplatform_codebuilder-vsc-workbench' );
+    if( !workbench ) return '';
+
+    const root   = workbench.shadowRoot || workbench;
+    const iframe = root.querySelector( 'iframe' );
+    if( !iframe ) return '';
+
+    try {
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+        if( !iframeDoc ) return '';
+
+        const editorContainer = iframeDoc.querySelector( 'div.editor-container' );
+        if( !editorContainer ) return '';
+
+        return extractText( editorContainer );
+    } catch( e ) {
+        // cross-origin iframe — content not accessible
+        return '';
+    }
+}
+
 function getIframeTextContent() {
     let combined = '';
-    let iframes = document.querySelectorAll( 'iframe' );
-    for( let iframe of iframes ) {
+    for( const iframe of document.querySelectorAll( 'iframe' ) ) {
         try {
-            let iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-            if( !iframeDoc || !iframeDoc.body ) continue;
-            let textNodes = getChildrenTextNodes( iframeDoc.body );
-            let text = textNodes.reduce( ( accumulator, currentValue ) => {
-                let theText = currentValue.wholeText.trim();
-                if( theText == '\n' || theText == '×'
-                        || theText == '' || /^\d+$/.test( theText ) ) {
-                    return accumulator;
-                }
-                return accumulator + theText + '\n';
-            }, '' );
-            combined += text;
+            const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+            if( iframeDoc?.body ) {
+                combined += extractText( iframeDoc.body );
+            }
         } catch( e ) {
             // cross-origin iframe — skip
         }
@@ -267,15 +246,13 @@ function getIframeTextContent() {
 }
 
 function getChildrenTextNodes( element ) {
-    let ownerDoc = element.ownerDocument || document;
-    let treeWalker = ownerDoc.createTreeWalker( element, NodeFilter.SHOW_TEXT, null, false );
-    let nodeArray = [];
+    const ownerDoc = element.ownerDocument || document;
+    const treeWalker = ownerDoc.createTreeWalker( element, NodeFilter.SHOW_TEXT, null, false );
+    const nodeArray = [];
     let aNode = treeWalker.nextNode();
     while( aNode ) {
-        // skip STYLE/SCRIPT elements
-        let parentTag = aNode?.parentNode?.tagName;
-        if( parentTag != 'STYLE'
-                && parentTag != 'SCRIPT' ) {
+        const parentTag = aNode?.parentNode?.tagName;
+        if( parentTag !== 'STYLE' && parentTag !== 'SCRIPT' ) {
             nodeArray.push( aNode );
         }
         aNode = treeWalker.nextNode();
@@ -283,49 +260,26 @@ function getChildrenTextNodes( element ) {
     return nodeArray;
 }
 
-async function getFlowDefinition( baseUrl, sessionId ) {
-    let params = location.search; // ?flowId=3013m000000XIygAAG
-    let flowIdArray = params.match( /(?:flowId\=)(.*?)(?=&|$)/ );
-    if( ! flowIdArray ) {
-        return;
-    }
-    let flowId = flowIdArray[ 1 ];
-
-    // Tooling API endpoint:  /services/data/v35.0/tooling/sobjects/Flow/301...AAG
-    let endpoint = "https://" + baseUrl +  "/services/data/" + TOOLING_API_VERSION + "/tooling/sobjects/Flow/" + flowId;
-    let request = {
-        method: "GET"
-        , headers: {
-          "Content-Type": "application/json"
-          , "Authorization": "Bearer " + sessionId
+async function getFlowDefinition( baseUrl, sessionId, flowId ) {
+    const endpoint = `https://${baseUrl}/services/data/${TOOLING_API_VERSION}/tooling/sobjects/Flow/${flowId}`;
+    const res  = await fetch( endpoint, {
+        method: 'GET',
+        headers: {
+            'Content-Type':  'application/json',
+            'Authorization': 'Bearer ' + sessionId
         }
-    };
-
-    let response = await fetch( endpoint, request );
-    let data = await response.json();
-
+    } );
+    const data = await res.json();
     return data.Metadata;
 }
 
 function replacer( key, value ) {
-    // filter nulls
-    if( value == null ) {
-        return undefined;
-    }
-    // filter empty arrays
-    if( Array.isArray( value ) && value.length == 0 ) {
-        return undefined;
-    }
-
-    const blockedElements = [ "apiVersion", "locationX", "locationY" ];
-    if( blockedElements.includes( key ) ) {
-        return undefined;
-    }
-
+    if( value == null ) return undefined;
+    if( Array.isArray( value ) && value.length === 0 ) return undefined;
+    if( BLOCKED_FLOW_KEYS.has( key ) ) return undefined;
     return value;
 }
 
 function purifyFlow( flowDefinition ) {
-    flowDefinition = JSON.stringify( flowDefinition, replacer, 3 );
-    return flowDefinition;
+    return JSON.stringify( flowDefinition, replacer, 3 );
 }

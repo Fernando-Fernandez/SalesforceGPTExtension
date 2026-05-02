@@ -36,7 +36,15 @@
           <button id="sendToGPT">Ask GPT to Explain</button>
 
           <div id="spinner" class="lds-dual-ring"></div>
-          <span id="response"></span>
+          <div id="response-wrapper">
+            <button id="copyResponse" title="Copy to clipboard">
+              <span class="icon-copy">Copy
+              </span>
+              <span class="icon-copied">Copied!
+              </span>
+            </button>
+            <span id="response"></span>
+          </div>
 
         </div>
       </li>

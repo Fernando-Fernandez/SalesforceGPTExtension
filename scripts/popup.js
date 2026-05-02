@@ -1,3 +1,5 @@
+import { getModelConfig } from './models.js';
+
 const setKeyButton       = document.querySelector( "button#setKey" );
 const sendToGPTButton    = document.querySelector( "button#sendToGPT" );
 const errorSpan          = document.querySelector( "#error" );
@@ -5,15 +7,72 @@ const responseSpan       = document.querySelector( "#response" );
 const spinner            = document.querySelector( "#spinner" );
 const gptVersionSelect   = document.getElementById( "gpt-version" );
 const customModelWrapper = document.getElementById( "custom-model-wrapper" );
+const copyResponseButton = document.getElementById( "copyResponse" );
+
+const GETDATA          = "getData";
+const KEY              = 'hashedKey';
+const OPENAI_URL       = 'https://api.openai.com/v1/chat/completions';
+const CACHE_TTL_MS     = 5 * 60 * 1000;
+const MODEL_KEY        = 'selectedModel';
+const CUSTOM_MODEL_KEY = 'customModel';
+
+// Inserts (or replaces) a single custom option just above "Custom…"
+function addCustomModelToSelect( name ) {
+    const existing = gptVersionSelect.querySelector( 'option.custom-entry' );
+    if( existing ) existing.remove();
+    const option       = document.createElement( 'option' );
+    option.value       = name;
+    option.textContent = name;
+    option.classList.add( 'custom-entry' );
+    gptVersionSelect.insertBefore( option, gptVersionSelect.querySelector( 'option[value="custom"]' ) );
+}
+
+// Commits the typed name into the select and hides the text input
+function commitCustomModel() {
+    const name = document.getElementById( 'custom-model' ).value.trim();
+    if( !name ) return;
+    addCustomModelToSelect( name );
+    gptVersionSelect.value = name;
+    customModelWrapper.style.display = 'none';
+    localStorage.setItem( MODEL_KEY, name );
+    localStorage.setItem( CUSTOM_MODEL_KEY, name );
+}
+
+// Restore last-used model on open
+const savedCustom = localStorage.getItem( CUSTOM_MODEL_KEY );
+if( savedCustom ) addCustomModelToSelect( savedCustom );
+
+const savedModel = localStorage.getItem( MODEL_KEY );
+if( savedModel && savedModel !== 'custom' ) {
+    gptVersionSelect.value = savedModel;
+} else if( savedModel === 'custom' ) {
+    gptVersionSelect.value = 'custom';
+    customModelWrapper.style.display = 'block';
+    if( savedCustom ) document.getElementById( 'custom-model' ).value = savedCustom;
+}
 
 gptVersionSelect.addEventListener( "change", () => {
-    customModelWrapper.style.display = gptVersionSelect.value === "custom" ? "block" : "none";
+    const val = gptVersionSelect.value;
+    localStorage.setItem( MODEL_KEY, val );
+    if( val === 'custom' ) {
+        const currentCustom = localStorage.getItem( CUSTOM_MODEL_KEY );
+        if( currentCustom ) document.getElementById( 'custom-model' ).value = currentCustom;
+        customModelWrapper.style.display = 'block';
+        document.getElementById( 'custom-model' ).focus();
+    } else {
+        customModelWrapper.style.display = 'none';
+    }
 } );
 
-const GETDATA       = "getData";
-const KEY           = 'hashedKey';
-const OPENAI_URL    = 'https://api.openai.com/v1/chat/completions';
-const CACHE_TTL_MS  = 5 * 60 * 1000;
+const customModelInput = document.getElementById( 'custom-model' );
+customModelInput.addEventListener( 'blur',    commitCustomModel );
+customModelInput.addEventListener( 'keydown', ( e ) => { if( e.key === 'Enter' ) commitCustomModel(); } );
+
+copyResponseButton.addEventListener( "click", () => {
+    navigator.clipboard.writeText( responseSpan.innerText );
+    copyResponseButton.classList.add( "copied" );
+    setTimeout( () => copyResponseButton.classList.remove( "copied" ), 1500 );
+} );
 
 errorSpan.innerText = "";
 
@@ -29,6 +88,7 @@ sendToGPTButton.addEventListener( "click", async () => {
     setStatus( 'Checking OpenAI Key...' );
     errorSpan.innerText = "";
     spinner.style.display = "inline-block";
+    copyResponseButton.style.display = "none";
 
     const storedKey = localStorage.getItem( KEY );
     if( !storedKey ) {
@@ -110,6 +170,7 @@ async function sendToGPT( dataObject, openAIKey, gptModel ) {
                 responseSpan.innerText = 'OpenAI (cached): ' + parsedResponse;
                 applyMarkdown();
                 spinner.style.display = "none";
+                copyResponseButton.style.display = "block";
                 return;
             }
         }
@@ -123,17 +184,19 @@ async function sendToGPT( dataObject, openAIKey, gptModel ) {
             }
         }
 
+        const { tokenLimitParam, temperature, top_p } = getModelConfig( model );
+
         const payload = JSON.stringify( {
             model,
             messages: [
                 { role: 'system', content: [ { type: 'text', text: 'You are an expert at troubleshooting and explaining code.' } ] },
                 { role: 'user',   content: [ { type: 'text', text: `${prompt} ${data}` } ] }
             ],
-            temperature:        0.3,
-            max_tokens:         2000,
-            top_p:              0.2,
-            frequency_penalty:  0,
-            presence_penalty:   0
+            temperature,
+            [ tokenLimitParam ]: 2000,
+            top_p,
+            frequency_penalty:   0,
+            presence_penalty:    0
         } );
 
         setStatus( 'Waiting for OpenAI response...' );
@@ -160,6 +223,7 @@ async function sendToGPT( dataObject, openAIKey, gptModel ) {
         responseSpan.innerText = parsedResponse;
         applyMarkdown();
         spinner.style.display = "none";
+        copyResponseButton.style.display = "block";
 
     } catch( e ) {
         responseSpan.innerText = e.message;
