@@ -56,7 +56,7 @@ h1 {
 
 .tabs > li {
   display: inline-block;
-  width: 50%;
+  width: 49%;
 }
 
 .tabs input[type="radio"].tab {
@@ -66,6 +66,8 @@ h1 {
 
 .tabs label.tab {
   display: block;
+  position: relative;
+  z-index: 3;
   padding: 8px 4px 6px;
   font-size: 13px;
   font-weight: 600;
@@ -93,6 +95,7 @@ h1 {
   padding: 14px;
   background: var(--white);
   position: absolute;
+  top: 100%;
   left: 0;
   width: 100%;
   z-index: 2;
@@ -151,43 +154,31 @@ button:hover  { background: var(--blue-dark); }
 button:active { background: var(--blue-dark); transform: translateY(1px); }
 
 
-/* ── Model selector (pill toggle) ── */
+/* ── Model selector ── */
 
-.model-selector {
-  display: flex;
-  margin-bottom: 12px;
-}
-
-.model-selector input[type="radio"] {
-  display: none;
-}
-
-.model-selector label {
-  flex: 1;
-  margin: 0;
-  padding: 5px 8px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--blue);
+select {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  outline: none;
+  margin-bottom: 10px;
+  color: var(--text);
   background: var(--white);
-  border: 1px solid var(--blue);
   cursor: pointer;
-  text-align: center;
-  transition: background 0.15s, color 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.model-selector label:first-of-type {
-  border-radius: var(--radius) 0 0 var(--radius);
-  border-right: none;
+select:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(1, 118, 211, 0.18);
 }
 
-.model-selector label:last-of-type {
-  border-radius: 0 var(--radius) var(--radius) 0;
-}
-
-.model-selector input[type="radio"]:checked + label {
-  background: var(--blue);
-  color: var(--white);
+#custom-model-wrapper {
+  display: none;
+  margin-top: -4px;
 }
 
 

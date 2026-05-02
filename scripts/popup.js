@@ -1,240 +1,168 @@
-const setKeyButton = document.querySelector( "button#setKey" );
-const sendToGPTButton = document.querySelector( "button#sendToGPT" );
-const errorSpan = document.querySelector( "#error" );
-const responseSpan = document.querySelector( "#response" );
-const spinner = document.querySelector( "#spinner" );
-const GETDATA = "getData";
-const KEY = 'hashedKey';
+const setKeyButton       = document.querySelector( "button#setKey" );
+const sendToGPTButton    = document.querySelector( "button#sendToGPT" );
+const errorSpan          = document.querySelector( "#error" );
+const responseSpan       = document.querySelector( "#response" );
+const spinner            = document.querySelector( "#spinner" );
+const gptVersionSelect   = document.getElementById( "gpt-version" );
+const customModelWrapper = document.getElementById( "custom-model-wrapper" );
+
+gptVersionSelect.addEventListener( "change", () => {
+    customModelWrapper.style.display = gptVersionSelect.value === "custom" ? "block" : "none";
+} );
+
+const GETDATA       = "getData";
+const KEY           = 'hashedKey';
+const OPENAI_URL    = 'https://api.openai.com/v1/chat/completions';
+const CACHE_TTL_MS  = 5 * 60 * 1000;
 
 errorSpan.innerText = "";
-spinner.style.display = "none";
-let retryCounter = 0;
-let tabId = null;
 
-setKeyButton.addEventListener( "click", async () => {
-    // console.log( "setKeyButton" );
+setKeyButton.addEventListener( "click", () => {
     errorSpan.innerText = "";
-    const openAIKeyInput = document.querySelector( "input#openAIKey" );
-
-    let enc = new TextEncoder();
-    let encrypted = enc.encode( openAIKeyInput.value );
-
-    localStorage.setItem( KEY, JSON.stringify( encrypted ) );
-
-    // clear out previous secret key
-    localStorage.setItem( "openAIKey", undefined );
-});
+    const input   = document.querySelector( "input#openAIKey" );
+    const encoded = new TextEncoder().encode( input.value );
+    localStorage.setItem( KEY, JSON.stringify( encoded ) );
+    localStorage.removeItem( "openAIKey" );
+} );
 
 sendToGPTButton.addEventListener( "click", async () => {
-    // console.log( "sendToGPT" );
-    spinner.style.display = "inline-block";
-    responseSpan.innerText = 'Checking OpenAI Key...';
+    setStatus( 'Checking OpenAI Key...' );
     errorSpan.innerText = "";
+    spinner.style.display = "inline-block";
 
-    let storedKey = localStorage.getItem( KEY );
-    if( ! storedKey ) {
+    const storedKey = localStorage.getItem( KEY );
+    if( !storedKey ) {
         spinner.style.display = "none";
         responseSpan.innerText = '';
         errorSpan.innerText = "Please set an OpenAI key!";
         return;
     }
 
-    let encodedKey = JSON.parse( storedKey );
-    let keyArray = [];
-    Object.keys( encodedKey ).forEach( idx => keyArray.push( encodedKey[ idx ] ) );
-    let intArray = new Uint8Array( keyArray );
-    let dec = new TextDecoder();
-    let openAIKey = dec.decode( intArray );
+    const openAIKey = decodeKey( storedKey );
 
-    responseSpan.innerText = 'Checking current page...';
+    setStatus( 'Checking current page...' );
 
-    // get current page data from the page itself
-    ( async () => {
-        // get last focused tab
-        let tabs = await chrome.tabs.query( { active: true, lastFocusedWindow: true } );
-
-        if( tabs.length <= 0 ) {
-            tabs = await chrome.tabs.query( { active: true, currentWindow: true } );
-        }
-
-        if( tabs.length <= 0 ) {
-            responseSpan.innerText = 'No active tab found...';
-            spinner.style.display = "none";
-            return;
-        }
-
-        responseSpan.innerText = 'Getting page data...';
-
-        // get data from last focused tab
-        let tab = tabs[ 0 ];
-        // console.log( 'calling getData from focused tab' );
-        retryCounter = 0;
-        tabId = tab.id;
-        sendMessageToBackground( openAIKey );
-        // chrome.tabs.sendMessage( tab.id, { message: GETDATA }, function( response ) { 
-        //     processDataFromTab( response, openAIKey ); 
-        // } );
-        return;
-    } )();
-
-    return;
-});
-
-function sendMessageToBackground( openAIKey ) {
-    chrome.tabs.sendMessage( tabId, { message: GETDATA }, function( response ) { 
-        processDataFromTab( response, openAIKey ); 
-    } );
-}
-
-function processDataFromTab( response, openAIKey ) {
-    if( chrome.runtime.lastError ) {
-        console.error( chrome.runtime.lastError.message );
+    let tabs = await chrome.tabs.query( { active: true, lastFocusedWindow: true } );
+    if( tabs.length === 0 ) {
+        tabs = await chrome.tabs.query( { active: true, currentWindow: true } );
     }
-    // if( chrome.runtime.lastError && retryCounter < 1 ) {
-    //     console.error( chrome.runtime.lastError.message );
-    //     retryCounter ++;
-    //     // method without parameters is the only way to use setTimeout in browser extensions now
-    //     setTimeout( sendMessageToBackground, 1000 );
-    //     return;
-    // }
-
-    if( ! response ) {
-        responseSpan.innerText = 'Could not obtain tab information.';
+    if( tabs.length === 0 ) {
+        setStatus( 'No active tab found...' );
         spinner.style.display = "none";
         return;
     }
-    // console.log( response );
-    responseSpan.innerText = 'Preparing prompt for GPT...';
 
-    // check custom prompt
-    let prompt;
-    let gptQuestion = document.getElementById( 'gptQuestion' );
-    if( gptQuestion && gptQuestion.value ) {
-        response.prompt = gptQuestion.value;
-    }
+    setStatus( 'Getting page data...' );
+    const tabId = tabs[ 0 ].id;
 
-    let gptModel = document.querySelector( 'input[name="gpt-version"]:checked' ).value;
+    chrome.tabs.sendMessage( tabId, { message: GETDATA }, async ( response ) => {
+        if( chrome.runtime.lastError ) {
+            console.error( chrome.runtime.lastError.message );
+        }
+        if( !response ) {
+            setStatus( 'Could not obtain tab information.' );
+            spinner.style.display = "none";
+            return;
+        }
 
-    sendToGPT( response, openAIKey, gptModel );
+        setStatus( 'Preparing prompt for GPT...' );
+
+        const gptQuestion = document.getElementById( 'gptQuestion' );
+        if( gptQuestion?.value ) {
+            response.prompt = gptQuestion.value;
+        }
+
+        const gptModel = gptVersionSelect.value === 'custom'
+            ? ( document.getElementById( 'custom-model' ).value.trim() || 'gpt-4o' )
+            : gptVersionSelect.value;
+        await sendToGPT( response, openAIKey, gptModel );
+    } );
+} );
+
+function decodeKey( storedKey ) {
+    const encoded = JSON.parse( storedKey );
+    return new TextDecoder().decode( new Uint8Array( Object.values( encoded ) ) );
 }
 
-function sendToGPT( dataObject, openAIKey, gptModel ) {
+function setStatus( text ) {
+    responseSpan.innerText = text;
+}
+
+function applyMarkdown() {
+    responseSpan.innerHTML = responseSpan.innerHTML.replace( /\*\*(.*?)\*\*/g, "<b>$1</b>" );
+}
+
+async function sendToGPT( dataObject, openAIKey, gptModel ) {
     try {
-        if( ! dataObject ) {
-            responseSpan.innerText = 'No data found received from current page.';
+        const { currentURL, resultData, prompt } = dataObject;
+
+        if( !resultData ) {
+            setStatus( 'No data found to send to GPT.' );
             spinner.style.display = "none";
             return;
         }
 
-        let { currentURL, resultData, prompt } = dataObject;
-
-        if( ! resultData ) {
-            responseSpan.innerText = 'No data found to send to GPT.';
-            spinner.style.display = "none";
-            return;
-        }
-
-        // attempt to retrieve previously stored response
         const cacheKey = JSON.stringify( { currentURL, resultData, prompt } );
-        const cachedResponse = sessionStorage.getItem( cacheKey );
-        if( cachedResponse ) {
-            let parsedCachedResponse = JSON.parse( cachedResponse );
-
-            // only use cached response if newer than 5 min
-            let cacheAgeMs = Math.abs( Date.now() - parsedCachedResponse.cachedDate );
-            if( cacheAgeMs < 300000 ) {
-                // display response 
-                responseSpan.innerText = 'OpenAI (cached response): ' + parsedCachedResponse.parsedResponse;
+        const cached = sessionStorage.getItem( cacheKey );
+        if( cached ) {
+            const { cachedDate, parsedResponse } = JSON.parse( cached );
+            if( Date.now() - cachedDate < CACHE_TTL_MS ) {
+                responseSpan.innerText = 'OpenAI (cached): ' + parsedResponse;
+                applyMarkdown();
                 spinner.style.display = "none";
                 return;
             }
         }
 
-        // use parameters recommended for Code Comment Generation
-        let temperature = 0.3;  // was 1;
-        let top_p = 0.2; // was 1;
-        let max_tokens = 2000; //  was 256, then 300
-        let frequency_penalty = 0;
-        let presence_penalty = 0;
-        let model = ( gptModel ? gptModel : 'gpt-3.5-turbo' );
-        let systemPrompt = 'You are an expert at troubleshooting and explaining code.';  // was 'You are a helpful assistant.';
-
-        // replace characters that would invalidate the JSON payload‘
-        let data = //`Current page URL ${currentURL}\\n` +
-                    resultData.replaceAll( '\n', ' ' ).replaceAll( '"', '“' )
-                                .replaceAll( '\'', '‘' ).replaceAll( '\\', '\\\\' )
-                                .replaceAll( '\t', ' ' ).replaceAll( '   ', ' ' );
-
-        // check size of data and select a bigger model as needed
+        let model = gptModel || 'gpt-3.5-turbo';
+        let data  = resultData;
         if( data.length > 16200 ) {
-
-            model = 'gpt-4o'; // 'gpt-3.5-turbo-16k';
-            // truncate data as needed
+            model = 'gpt-4o';
             if( data.length > 130872 ) {
                 data = data.substring( 0, 130872 );
             }
         }
 
-        // build prompt with current page data in a request
-        // let payload = `{ "model":"${model}","messages":[{"role":"system","content":"${systemPrompt}"},{"role":"user","content":"${prompt} ${data}"}],"temperature": ${temperature},"max_tokens":${max_tokens},"top_p":${top_p},"frequency_penalty":${frequency_penalty},"presence_penalty":${presence_penalty} }`;
-        let sysMessage = `{"role":"system","content":[{"type":"text","text":"${systemPrompt}"}]}`;
-        let userMessage = `{"role":"user","content":[{"type":"text","text":"${prompt} ${data}"}]}`;
-        let payload = `{ "model":"${model}","messages":[${sysMessage},${userMessage}],"temperature": ${temperature},"max_tokens":${max_tokens},"top_p":${top_p},"frequency_penalty":${frequency_penalty},"presence_penalty":${presence_penalty} }`;
+        const payload = JSON.stringify( {
+            model,
+            messages: [
+                { role: 'system', content: [ { type: 'text', text: 'You are an expert at troubleshooting and explaining code.' } ] },
+                { role: 'user',   content: [ { type: 'text', text: `${prompt} ${data}` } ] }
+            ],
+            temperature:        0.3,
+            max_tokens:         2000,
+            top_p:              0.2,
+            frequency_penalty:  0,
+            presence_penalty:   0
+        } );
 
-        // prepare request
-        let url = "https://api.openai.com/v1/chat/completions";
-        let xhr = new XMLHttpRequest();
-        xhr.open( "POST", url );
-        xhr.setRequestHeader( "Content-Type", "application/json" );
-        xhr.setRequestHeader( "Authorization", "Bearer " + openAIKey );
+        setStatus( 'Waiting for OpenAI response...' );
 
-        // submit request and receive response
-        responseSpan.innerText = 'Waiting for OpenAI response...';
-        xhr.onreadystatechange = function () {
-            if( xhr.readyState === 4 ) {
-                console.log( xhr.status );
-                console.log( xhr.responseText );
-                let open_ai_response = xhr.responseText;
-                console.log( open_ai_response );
+        const res  = await fetch( OPENAI_URL, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + openAIKey },
+            body:    payload
+        } );
+        const json = await res.json();
 
-                let parsedResponse = JSON.parse( open_ai_response );
-
-                if( parsedResponse.error ) {
-                    parsedResponse = parsedResponse.error.message + ` (${parsedResponse.error.type})`;
-
-                } else {
-                    let finishReason = parsedResponse.choices[ 0 ].finish_reason;
-                    parsedResponse = parsedResponse.choices[ 0 ].message.content;
-                    // The token count of prompt + max_tokens will not exceed the model's context length. 
-                    if( finishReason == 'length' ) {
-                        parsedResponse = parsedResponse + ' (RESPONSE TRUNCATED DUE TO LIMIT)';
-                    }
-                }
-
-                // store response in local cache
-                const cacheKey = JSON.stringify( { currentURL, resultData, prompt } );
-                sessionStorage.setItem( cacheKey, JSON.stringify( { 
-                                                cachedDate: Date.now() 
-                                                , parsedResponse } ) 
-                                        );
-
-                // display response 
-                responseSpan.innerText = parsedResponse;
-                convertResponseFromMarkdown();
-                spinner.style.display = "none";
+        let parsedResponse;
+        if( json.error ) {
+            parsedResponse = `${json.error.message} (${json.error.type})`;
+        } else {
+            parsedResponse = json.choices[ 0 ].message.content;
+            if( json.choices[ 0 ].finish_reason === 'length' ) {
+                parsedResponse += ' (RESPONSE TRUNCATED DUE TO LIMIT)';
             }
-        };
+        }
 
-        xhr.send( payload );
+        sessionStorage.setItem( cacheKey, JSON.stringify( { cachedDate: Date.now(), parsedResponse } ) );
+
+        responseSpan.innerText = parsedResponse;
+        applyMarkdown();
+        spinner.style.display = "none";
+
     } catch( e ) {
         responseSpan.innerText = e.message;
         spinner.style.display = "none";
     }
-}
-
-function convertResponseFromMarkdown() {
-    const span = document.getElementById( "response" );
-
-    // Replace **text** with <b>text</b>
-    span.innerHTML = span.innerHTML.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>");
 }

@@ -20,11 +20,17 @@
           <label for="gptQuestion">Question (leave blank for default):</label>
           <input id="gptQuestion" type="text" placeholder="Ask something about this page…" />
 
-          <div class="model-selector">
-            <input type="radio" id="gpt-4o" name="gpt-version" value="gpt-4o" checked>
-            <label for="gpt-4o">GPT-4o</label>
-            <input type="radio" id="gpt-3.5-turbo" name="gpt-version" value="gpt-3.5-turbo">
-            <label for="gpt-3.5-turbo">GPT-3.5</label>
+          <label for="gpt-version">Model:</label>
+          <select id="gpt-version">
+            <option value="gpt-4o">GPT-4o</option>
+            <option value="gpt-4.1">GPT-4.1</option>
+            <option value="gpt-5-mini">GPT-5 mini</option>
+            <option value="gpt-5-nano">GPT-5 nano</option>
+            <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+            <option value="custom">Custom…</option>
+          </select>
+          <div id="custom-model-wrapper">
+            <input id="custom-model" type="text" placeholder="Enter model name…" />
           </div>
 
           <button id="sendToGPT">Ask GPT to Explain</button>
