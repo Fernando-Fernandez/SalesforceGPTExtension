@@ -95,12 +95,20 @@ function processRequestMessage( request, sender, sendResponse ) {
     let pageContent = textNodes.reduce( ( accumulator, currentValue ) => {
         // skip empty lines, lines with only digits
         let theText = currentValue.wholeText.trim();
-        if( theText == '\n' || theText == '×' 
+        if( theText == '\n' || theText == '×'
                 || theText == '' || /^\d+$/.test( theText ) ) {
             return accumulator;
         }
         return accumulator + theText + '\n';
     }, '' );
+
+    // prefer iframe content when available — Salesforce often renders the real
+    // page content inside a same-origin iframe, leaving the parent with only
+    // header/navigation UI
+    let iframeContent = getIframeTextContent();
+    if( iframeContent.length > pageContent.length ) {
+        pageContent = iframeContent;
+    }
 
     let prompt = 'Please summarize the following page.';
 
@@ -234,8 +242,33 @@ function substringExceptBetween( str, prefix, suffix ) {
     return str.replace( substringBetween( str, prefix, suffix ), '' );
 }
 
+function getIframeTextContent() {
+    let combined = '';
+    let iframes = document.querySelectorAll( 'iframe' );
+    for( let iframe of iframes ) {
+        try {
+            let iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+            if( !iframeDoc || !iframeDoc.body ) continue;
+            let textNodes = getChildrenTextNodes( iframeDoc.body );
+            let text = textNodes.reduce( ( accumulator, currentValue ) => {
+                let theText = currentValue.wholeText.trim();
+                if( theText == '\n' || theText == '×'
+                        || theText == '' || /^\d+$/.test( theText ) ) {
+                    return accumulator;
+                }
+                return accumulator + theText + '\n';
+            }, '' );
+            combined += text;
+        } catch( e ) {
+            // cross-origin iframe — skip
+        }
+    }
+    return combined;
+}
+
 function getChildrenTextNodes( element ) {
-    let treeWalker = document.createTreeWalker( element, NodeFilter.SHOW_TEXT, null, false );
+    let ownerDoc = element.ownerDocument || document;
+    let treeWalker = ownerDoc.createTreeWalker( element, NodeFilter.SHOW_TEXT, null, false );
     let nodeArray = [];
     let aNode = treeWalker.nextNode();
     while( aNode ) {

@@ -4,64 +4,48 @@
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GPT for Salesforce</title>
     <link rel="stylesheet" href="./popup.css" />
   </head>
-  <body style="width: 400px;" >
-    <template id="li_template">
-      <li>
-        <a>
-          <h3 class="title">Tab Title</h3>
-          <p class="pathname">Tab Pathname</p>
-        </a>
-      </li>
-    </template>
-
-    <h1>GPT Extension for Salesforce</h1>
-    <span id="error" ></span>
+  <body>
+    <h1>GPT for Salesforce</h1>
+    <span id="error"></span>
 
     <ul class="tabs" role="tablist">
       <li>
         <input type="radio" name="tabs" class="tab" id="tab2" checked />
         <label for="tab2" class="tab" role="tab" aria-selected="true" aria-controls="panel2" tabindex="0">Ask GPT</label>
-        <div id="tab-content2" class="tab-content" role="tabpanel" aria-labelledby="askGPT" >
-          <p>
+        <div id="tab-content2" class="tab-content" role="tabpanel" aria-labelledby="askGPT">
 
-            <label for="gptQuestion" >Ask your question or leave blank for default prompt:</label>
-            <input id="gptQuestion" />
+          <label for="gptQuestion">Question (leave blank for default):</label>
+          <input id="gptQuestion" type="text" placeholder="Ask something about this page…" />
 
-            <button id="sendToGPT" >Ask GPT to Explain</button>
-            <br />
-            <div>
-              <input type="radio" id="gpt-4o" name="gpt-version" value="gpt-4o" checked>
-              <label for="gpt-4o">gpt-4o</label>
-              <input type="radio" id="gptVersion" name="gpt-version" value="gpt-3.5-turbo" >
-              <label for="gpt-3.5-turbo">gpt-3.5-turbo</label>
-            </div>
-        
-            <br />
-            <div id="spinner" class="lds-dual-ring"></div>
-            <span id="response" > </span>
+          <div class="model-selector">
+            <input type="radio" id="gpt-4o" name="gpt-version" value="gpt-4o" checked>
+            <label for="gpt-4o">GPT-4o</label>
+            <input type="radio" id="gpt-3.5-turbo" name="gpt-version" value="gpt-3.5-turbo">
+            <label for="gpt-3.5-turbo">GPT-3.5</label>
+          </div>
 
-          </p>
+          <button id="sendToGPT">Ask GPT to Explain</button>
+
+          <div id="spinner" class="lds-dual-ring"></div>
+          <span id="response"></span>
+
         </div>
       </li>
       <li>
         <input type="radio" name="tabs" id="tab1" class="tab" />
         <label for="tab1" class="tab" role="tab" aria-selected="false" aria-controls="panel1" tabindex="0">OpenAI Key</label>
-        <div id="tab-content1" class="tab-content" role="tabpanel" aria-labelledby="openAIKey" >
-          <p>
+        <div id="tab-content1" class="tab-content" role="tabpanel" aria-labelledby="openAIKey">
 
-            <label for="openAIKey" >Enter your OpenAI key to be able to ask questions about Salesforce pages.</label>
-            <input id="openAIKey" type="password" name="openAIKey" />
-            &nbsp;&nbsp;
-            <button id="setKey" >Set OpenAI key</button>
+          <label for="openAIKey">Enter your OpenAI key:</label>
+          <input id="openAIKey" type="password" name="openAIKey" placeholder="sk-…" />
+          <button id="setKey">Save Key</button>
 
-          </p>
         </div>
       </li>
     </ul>
-
-
 
     <script src="./scripts/popup.js" type="module"></script>
   </body>
