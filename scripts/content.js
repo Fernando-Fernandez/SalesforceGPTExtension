@@ -221,9 +221,7 @@ function getCodeBuilderContent() {
         if( !iframeDoc ) return '';
 
         const editorContainer = iframeDoc.querySelector( 'div.editor-container' );
-        if( !editorContainer ) return '';
-
-        return extractText( editorContainer );
+        return extractText( editorContainer || iframeDoc.body );
     } catch( e ) {
         // cross-origin iframe — content not accessible
         return '';
