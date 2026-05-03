@@ -4,3 +4,4 @@ openAIKey.txt
 debugLogExample1.txt
 notes.txt
 dist/*.zip
+*.zip
