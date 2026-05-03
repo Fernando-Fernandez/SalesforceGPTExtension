@@ -2,7 +2,7 @@
     "manifest_version": 3,
     "name": "GPT Extension for Salesforce",
     "description": "Gets a GPT answer about a Salesforce item (flow, debug, class, formula, etc).",
-    "version": "1.07",
+    "version": "1.08",
     "icons": {
         "16": "images/icon-16.png",
         "32": "images/icon-32.png",
@@ -31,7 +31,6 @@
         "js": [
           "scripts/content.js"
         ]
-        , "type": "module"
         , "run_at": "document_start"
         , "matches": [
           "https://*.salesforce.com/*",
